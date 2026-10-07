@@ -10,6 +10,7 @@ Usage:
   claude-profiles adopt-default <name> [--color <color>]   register Claude's existing data folder
   claude-profiles open <name>                              focus if running, otherwise launch
   claude-profiles quit <name>
+  claude-profiles signin <name> [--yes]                    quit other instances while you sign in, then reopen them
   claude-profiles remove <name> [--trash-data]
   claude-profiles install                                  copy binary to ~/.local/bin, rebuild apps
   claude-profiles menubar
@@ -86,6 +87,35 @@ func install() throws {
     }
 }
 
+func signIn(_ args: inout [String]) throws {
+    let yes = flag("--yes", in: &args)
+    let profile = requireProfile(args.first)
+    let registry = Registry.load()
+    let others = Instances.others(than: profile)
+
+    if !others.isEmpty {
+        let names = others.map { Instances.profile(for: $0, in: registry)?.name ?? "pid \($0.pid)" }
+        print("Google sign-in returns through a claude:// link, which macOS may hand to the wrong Claude window.")
+        print("To sign in to \(profile.name), these will quit and reopen afterwards: \(names.joined(separator: ", "))")
+        if !yes {
+            print("Continue? [y/N] ", terminator: "")
+            guard readLine()?.lowercased().hasPrefix("y") == true else { print("Cancelled."); return }
+        }
+        let stuck = Instances.quitAndWait(others)
+        if !stuck.isEmpty {
+            Instances.relaunch(others.filter { o in !stuck.contains { $0.pid == o.pid } })
+            let stuckNames = stuck.map { Instances.profile(for: $0, in: registry)?.name ?? "pid \($0.pid)" }
+            throw ProfileError("\(stuckNames.joined(separator: ", ")) didn't quit (maybe a confirmation dialog). Quit it and retry.")
+        }
+    }
+
+    try Instances.open(profile)
+    print("Sign in inside the Claude \(profile.name) window, then press Return here… ", terminator: "")
+    _ = readLine()
+    Instances.relaunch(others)
+    if !others.isEmpty { print("Reopened \(others.count) other instance(s).") }
+}
+
 func runLauncher(slug: String) -> Never {
     do {
         guard let profile = Registry.load().find(slug) else {
@@ -122,6 +152,8 @@ do {
     case "quit":
         let profile = requireProfile(args.first)
         print(Instances.quit(profile) ? "Asked \(profile.name) to quit." : "\(profile.name) isn't running.")
+    case "signin", "sign-in", "login":
+        try signIn(&args)
     case "remove", "rm":
         let trashData = flag("--trash-data", in: &args)
         let profile = requireProfile(args.first)

@@ -98,6 +98,21 @@ final class MenuBarController: NSObject, NSMenuDelegate {
             menu.addItem(quit)
         }
 
+        if !registry.profiles.isEmpty {
+            let signIn = NSMenuItem(title: "Sign In to Profile", action: nil, keyEquivalent: "")
+            let sub = NSMenu()
+            for profile in registry.profiles {
+                let entry = NSMenuItem(title: "\(profile.name)…", action: #selector(signInProfile(_:)), keyEquivalent: "")
+                entry.target = self
+                entry.representedObject = profile.slug
+                entry.image = Palette.dot(profile.nsColor)
+                sub.addItem(entry)
+            }
+            signIn.submenu = sub
+            if runningProfiles.isEmpty { menu.addItem(.separator()) }
+            menu.addItem(signIn)
+        }
+
         menu.addItem(.separator())
         menu.addItem(action("Add Profile…", #selector(addProfile)))
         menu.addItem(action("Show Profiles Folder", #selector(showFolder)))
@@ -129,6 +144,48 @@ final class MenuBarController: NSObject, NSMenuDelegate {
     @objc private func quitProfile(_ sender: NSMenuItem) {
         guard let profile = profile(from: sender) else { return }
         _ = Instances.quit(profile)
+    }
+
+    /// Quits other instances so the claude:// sign-in callback can only reach this profile, then reopens them.
+    @objc private func signInProfile(_ sender: NSMenuItem) {
+        guard let profile = profile(from: sender) else { return }
+        signIn(profile)
+    }
+
+    private func signIn(_ profile: Profile) {
+        let registry = Registry.load()
+        let others = Instances.others(than: profile)
+        NSApp.activate(ignoringOtherApps: true)
+
+        if !others.isEmpty {
+            let names = others.map { Instances.profile(for: $0, in: registry)?.name ?? "pid \($0.pid)" }
+            let confirm = NSAlert()
+            confirm.messageText = "Sign in to \(profile.name)"
+            confirm.informativeText = "Google sign-in comes back through a claude:// link that macOS may hand to the wrong Claude window. "
+                + "These will quit until you're signed in, then reopen: \(names.joined(separator: ", ")).\n\n"
+                + "Running Claude Code sessions in them will stop."
+            confirm.addButton(withTitle: "Quit Others & Continue")
+            confirm.addButton(withTitle: "Cancel")
+            guard confirm.runModal() == .alertFirstButtonReturn else { return }
+
+            let stuck = Instances.quitAndWait(others)
+            if !stuck.isEmpty {
+                Instances.relaunch(others.filter { o in !stuck.contains { $0.pid == o.pid } })
+                let stuckNames = stuck.map { Instances.profile(for: $0, in: registry)?.name ?? "pid \($0.pid)" }
+                showError(ProfileError("\(stuckNames.joined(separator: ", ")) didn't quit (maybe it's showing a confirmation). Quit it and try again."))
+                return
+            }
+        }
+
+        do { try Instances.open(profile) } catch { showError(error); Instances.relaunch(others); return }
+
+        let done = NSAlert()
+        done.messageText = "Sign in to \(profile.name) now"
+        done.informativeText = "Finish signing in inside the Claude \(profile.name) window, then click Done"
+            + (others.isEmpty ? "." : " to reopen the other profiles.")
+        done.addButton(withTitle: "Done")
+        done.runModal()
+        Instances.relaunch(others)
     }
 
     @objc private func addProfile() {
@@ -163,7 +220,7 @@ final class MenuBarController: NSObject, NSMenuDelegate {
             var registry = Registry.load()
             let profile = try registry.add(name: name, color: colorPopup.selectedItem?.representedObject as? String)
             try Bundles.writeLauncher(for: profile)
-            try Instances.launch(profile)
+            signIn(profile)
         } catch {
             showError(error)
         }

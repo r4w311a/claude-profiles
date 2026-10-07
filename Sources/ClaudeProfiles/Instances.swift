@@ -36,8 +36,12 @@ enum Instances {
     }
 
     static func launch(_ profile: Profile) throws {
+        try launch(dataDir: profile.dataDir)
+    }
+
+    static func launch(dataDir: String?) throws {
         var args = ["-n", "-a", Paths.claudeApp.path]
-        if let dir = profile.dataDir {
+        if let dir = dataDir {
             try FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
             args += ["--args", "--user-data-dir=\(dir)"]
         }
@@ -69,6 +73,34 @@ enum Instances {
     static func quit(_ profile: Profile) -> Bool {
         guard let instance = instance(for: profile) else { return false }
         return instance.app.terminate()
+    }
+
+    // MARK: - Sign-in
+
+    // Google sign-in finishes in the system browser, which hands the result back through a claude:// link.
+    // macOS delivers that link to one Claude instance of its choosing, and only the instance that started
+    // the login (it holds the matching hop_nonce) accepts it. So during sign-in, the target must be alone.
+
+    /// Every running instance except the profile's own.
+    static func others(than profile: Profile) -> [Instance] {
+        running().filter { !matches(profile, $0) }
+    }
+
+    /// Asks the instances to quit and waits for them to exit. Returns the ones still running at the timeout.
+    static func quitAndWait(_ instances: [Instance], timeout: TimeInterval = 20) -> [Instance] {
+        for instance in instances { instance.app.terminate() }
+        let deadline = Date().addingTimeInterval(timeout)
+        var remaining = instances
+        while !remaining.isEmpty, Date() < deadline {
+            Thread.sleep(forTimeInterval: 0.25)
+            remaining.removeAll { kill($0.pid, 0) != 0 }
+        }
+        return remaining
+    }
+
+    /// Relaunches instances closed by `quitAndWait`, each with the data folder it had.
+    static func relaunch(_ instances: [Instance]) {
+        for instance in instances { try? launch(dataDir: instance.dataDir) }
     }
 
     // MARK: - Process arguments

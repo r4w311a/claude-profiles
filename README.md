@@ -36,6 +36,7 @@ You can also add profiles from the menu bar app (**Add Profile…**).
 | `adopt-default <name> [--color c]` | Register the existing default Claude folder |
 | `open <name>` | Focus if running, otherwise launch |
 | `quit <name>` | Quit just that profile |
+| `signin <name> [--yes]` | Quit other instances while you sign in to this one, then reopen them |
 | `remove <name> [--trash-data]` | Remove the profile and launcher; `--trash-data` moves its folder to the Trash (never the default folder) |
 | `install` | Copy the binary to `~/.local/bin` and rebuild the apps (run after code changes) |
 | `menubar` | Run the menu bar switcher in the foreground |
@@ -45,13 +46,13 @@ Colors: blue, orange, green, purple, red, pink, teal, yellow, indigo, mint, brow
 
 ## Menu bar
 
-The status item shows the frontmost profile's color dot and name, and a grey dot when Claude isn't in front. The menu lists every profile: a ✓ means it's running, bold means it's frontmost or was last used, and clicking a profile focuses or launches it. There's also **Quit Profile ▸**, **Add Profile…** and **Show Profiles Folder**.
+The status item shows the frontmost profile's color dot and name, and a grey dot when Claude isn't in front. The menu lists every profile: a ✓ means it's running, bold means it's frontmost or was last used, and clicking a profile focuses or launches it. There's also **Quit Profile ▸**, **Sign In to Profile ▸**, **Add Profile…** and **Show Profiles Folder**.
 
 ## Caveats
 
 - **Same Dock icon:** every instance is the same signed Claude.app, so the Dock and Cmd-Tab show identical icons. Use the menu bar dot to tell them apart. Changing the icon would mean re-signing Claude, which breaks auto-update and Keychain access.
 - **Use the launchers, not the plain Claude icon:** while any profile is running, clicking the stock Claude icon just focuses whichever instance macOS picks. Pin the `Claude <Name>` launchers to the Dock instead.
-- **First sign-in:** sign in to a new profile while the other instances are quit, so the `claude://` login callback reaches the right window. This is needed only once per profile.
+- **First sign-in:** use `claude-profiles signin <name>` or the menu bar's **Sign In to Profile ▸**. Google sign-in finishes in your browser and comes back through a `claude://` link. macOS gives that link to one Claude instance (usually the oldest), and only the instance that started the login accepts it. So `signin` quits the other instances, opens the profile, waits while you sign in, then reopens them. This is needed only once per profile; the login persists after that.
 - **Shared Claude Code settings:** `~/.claude` (CLI settings and memory) is shared by every profile's Code tab. Each tab still authenticates with its own desktop login.
 - **Shared logs:** all instances write to `~/Library/Logs/Claude`.
 - **Updates may break it:** this relies on Chromium's `--user-data-dir` flag. Claude already ignores its own `CLAUDE_USER_DATA_DIR` override in signed builds, so a future update could block the flag too. After a big update, open a profile and check that `claude-profiles list` shows it running with its own folder.
