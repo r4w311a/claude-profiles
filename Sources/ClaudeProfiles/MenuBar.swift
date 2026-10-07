@@ -1,6 +1,5 @@
 import AppKit
 
-/// Menu bar switcher: a colored dot for the frontmost Claude profile, plus a menu to open, focus, or quit profiles.
 final class MenuBarController: NSObject, NSMenuDelegate {
     private let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
     private let menu = NSMenu()
@@ -28,8 +27,6 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         exit(0)
     }
 
-    // MARK: - Status item
-
     @objc private func workspaceChanged(_ note: Notification) {
         updateTitle()
     }
@@ -37,7 +34,7 @@ final class MenuBarController: NSObject, NSMenuDelegate {
     private func frontmostProfile(_ registry: Registry) -> Profile? {
         guard let front = NSWorkspace.shared.frontmostApplication,
               front.bundleIdentifier == Paths.claudeBundleID else { return nil }
-        let instance = Instance(app: front, dataDir: Instances.userDataDir(of: front.processIdentifier))
+        let instance = Instance(app: front, dataDir: ProcessArguments.userDataDir(of: front.processIdentifier))
         return Instances.profile(for: instance, in: registry)
     }
 
@@ -52,8 +49,6 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         button.title = front.map { " \($0.name)" } ?? ""
         button.toolTip = front.map { "Claude: \($0.name)" } ?? "Claude Profiles"
     }
-
-    // MARK: - Menu
 
     func menuNeedsUpdate(_ menu: NSMenu) {
         menu.removeAllItems()
@@ -146,7 +141,6 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         _ = Instances.quit(profile)
     }
 
-    /// Quits other instances so the claude:// sign-in callback can only reach this profile, then reopens them.
     @objc private func signInProfile(_ sender: NSMenuItem) {
         guard let profile = profile(from: sender) else { return }
         signIn(profile)
@@ -158,7 +152,7 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         NSApp.activate(ignoringOtherApps: true)
 
         if !others.isEmpty {
-            let names = others.map { Instances.profile(for: $0, in: registry)?.name ?? "pid \($0.pid)" }
+            let names = others.map { Instances.displayName($0, in: registry) }
             let confirm = NSAlert()
             confirm.messageText = "Sign in to \(profile.name)"
             confirm.informativeText = "Google sign-in comes back through a claude:// link that macOS may hand to the wrong Claude window. "
@@ -168,16 +162,21 @@ final class MenuBarController: NSObject, NSMenuDelegate {
             confirm.addButton(withTitle: "Cancel")
             guard confirm.runModal() == .alertFirstButtonReturn else { return }
 
-            let stuck = Instances.quitAndWait(others)
-            if !stuck.isEmpty {
-                Instances.relaunch(others.filter { o in !stuck.contains { $0.pid == o.pid } })
-                let stuckNames = stuck.map { Instances.profile(for: $0, in: registry)?.name ?? "pid \($0.pid)" }
-                showError(ProfileError("\(stuckNames.joined(separator: ", ")) didn't quit (maybe it's showing a confirmation). Quit it and try again."))
+            do {
+                try Instances.quitForSignIn(others, registry: registry)
+            } catch {
+                showError(error)
                 return
             }
         }
 
-        do { try Instances.open(profile) } catch { showError(error); Instances.relaunch(others); return }
+        do {
+            try Instances.open(profile)
+        } catch {
+            showError(error)
+            Instances.relaunch(others)
+            return
+        }
 
         let done = NSAlert()
         done.messageText = "Sign in to \(profile.name) now"

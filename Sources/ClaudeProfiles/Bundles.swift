@@ -1,7 +1,5 @@
 import Foundation
 
-/// Writes the small .app bundles that wrap this binary: one launcher per profile, plus the menu bar app.
-/// Each bundle carries its own copy of the binary and tells it what to do through an Info.plist key.
 enum Bundles {
     static let profileKey = "ClaudeProfileSlug"
     static let menuBarKey = "ClaudeProfilesMenuBar"
@@ -67,12 +65,9 @@ enum Bundles {
         try data.write(to: contents.appendingPathComponent("Info.plist"))
 
         _ = run("/usr/bin/codesign", ["--force", "--sign", "-", bundle.path])
-        // Nudge Launch Services so Spotlight and Launchpad pick up the new bundle right away.
         _ = run("/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister",
                 ["-f", bundle.path])
     }
-
-    // MARK: - Login item
 
     static func installAgent() throws {
         let plist: [String: Any] = [

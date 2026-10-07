@@ -1,6 +1,4 @@
 #!/bin/sh
-# Builds claude-profiles, installs it to ~/.local/bin, and (re)builds the menu bar app and profile launchers.
-# Pass --login to also start the menu bar app at login.
 set -e
 cd "$(dirname "$0")"
 
