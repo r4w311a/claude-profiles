@@ -1,0 +1,18 @@
+#!/bin/sh
+# Builds claude-profiles, installs it to ~/.local/bin, and (re)builds the menu bar app and profile launchers.
+# Pass --login to also start the menu bar app at login.
+set -e
+cd "$(dirname "$0")"
+
+swift build -c release
+.build/release/claude-profiles install
+
+if [ "$1" = "--login" ]; then
+  "$HOME/.local/bin/claude-profiles" install-agent
+fi
+
+case ":$PATH:" in
+  *":$HOME/.local/bin:"*) ;;
+  *) echo "Note: add ~/.local/bin to your PATH to use \`claude-profiles\` directly." ;;
+esac
+echo "Done. Open ~/Applications/Claude Profiles.app to start the menu bar switcher."
