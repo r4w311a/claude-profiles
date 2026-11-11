@@ -277,9 +277,11 @@ private final class AddProfileForm: ObservableObject {
     @Published var name = ""
     @Published var color: String
     @Published var error: String?
+    @Published var isCurrentAccount: Bool
 
-    init(color: String) {
+    init(color: String, isCurrentAccount: Bool) {
         self.color = color
+        self.isCurrentAccount = isCurrentAccount
     }
 }
 
@@ -289,7 +291,8 @@ private struct AddProfileSheet: View {
 
     init(model: AppModel) {
         self.model = model
-        _form = StateObject(wrappedValue: AddProfileForm(color: model.suggestedColor))
+        _form = StateObject(wrappedValue: AddProfileForm(color: model.suggestedColor,
+                                                         isCurrentAccount: !model.hasDefaultProfile))
     }
 
     private var trimmedName: String { form.name.trimmingCharacters(in: .whitespaces) }
@@ -301,16 +304,23 @@ private struct AddProfileSheet: View {
                 Image(nsImage: Palette.badge(initial, color: Palette.color(named: form.color), size: 46))
                 VStack(alignment: .leading, spacing: 3) {
                     Text("New Profile").font(.system(size: 17, weight: .semibold))
-                    Text("A separate Claude app with its own login and chats.")
+                    Text(form.isCurrentAccount
+                         ? "Gives a name to the account you already use in Claude."
+                         : "A separate Claude app with its own login and chats.")
                         .font(.callout)
                         .foregroundStyle(.secondary)
                 }
             }
 
-            TextField("Name, for example Work", text: $form.name)
+            TextField(form.isCurrentAccount ? "Name, for example Personal" : "Name, for example Work", text: $form.name)
                 .textFieldStyle(.roundedBorder)
                 .controlSize(.large)
                 .onSubmit(add)
+
+            if !model.hasDefaultProfile {
+                Toggle("This is the account already signed in to Claude", isOn: $form.isCurrentAccount)
+                    .toggleStyle(.checkbox)
+            }
 
             LazyVGrid(columns: Array(repeating: GridItem(.fixed(30), spacing: 12), count: 6), spacing: 12) {
                 ForEach(Palette.names, id: \.self) { swatch in
@@ -345,7 +355,8 @@ private struct AddProfileSheet: View {
     private func add() {
         guard !trimmedName.isEmpty else { return }
         do {
-            try model.add(name: trimmedName, color: form.color)
+            try model.add(name: trimmedName, color: form.color,
+                          isCurrentAccount: form.isCurrentAccount && !model.hasDefaultProfile)
             model.isAddingProfile = false
         } catch {
             form.error = error.localizedDescription

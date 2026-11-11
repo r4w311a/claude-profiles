@@ -137,9 +137,13 @@ final class AppModel: ObservableObject {
         rebuild([profile], restartRunning: true, force: true)
     }
 
-    func add(name: String, color: String) throws {
+    var hasDefaultProfile: Bool {
+        profiles.contains(where: \.isDefault)
+    }
+
+    func add(name: String, color: String, isCurrentAccount: Bool) throws {
         var registry = Registry.load()
-        let profile = try registry.add(name: name, color: color)
+        let profile = try registry.add(name: name, color: color, adoptDefault: isCurrentAccount)
         reloadProfiles()
         switchTo(profile.slug)
     }

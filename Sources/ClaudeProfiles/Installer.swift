@@ -38,6 +38,23 @@ enum Installer {
         Shell.run("/usr/bin/open", [Paths.menuBarApp.path])
     }
 
+    static func uninstall() throws {
+        let running = Registry.load().profiles.filter { !$0.isDefault && $0.running != nil }
+        guard running.isEmpty else {
+            throw ProfileError("Quit \(running.map(\.appName).joined(separator: ", ")) first.")
+        }
+        uninstallLoginItem()
+        NSRunningApplication.runningApplications(withBundleIdentifier: menuBarBundleID).forEach { $0.terminate() }
+        let fileManager = FileManager.default
+        for item in [Paths.menuBarApp, Paths.profileApps] where fileManager.fileExists(atPath: item.path) {
+            try fileManager.trashItem(at: item, resultingItemURL: nil)
+            print("Moved \(item.path) to the Trash.")
+        }
+        try? fileManager.removeItem(at: Paths.installedLauncher)
+        print("Your profile data is still in \(Paths.root.path).")
+        print("Run `brew uninstall claude-profiles` to remove the command.")
+    }
+
     static func installLoginItem() throws {
         let plist: [String: Any] = [
             "Label": Paths.agentLabel,
