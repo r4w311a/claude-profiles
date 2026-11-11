@@ -155,7 +155,11 @@ private struct StatusLine: View {
                 .fill(isRunning ? Color.green : Color.secondary.opacity(0.4))
                 .frame(width: 7, height: 7)
             Text(isRunning ? "Running" : "Not running")
-            if isBuilding {
+            if let activity = model.activities[profile.slug] {
+                Text("·")
+                ProgressView().controlSize(.mini)
+                Text(activity)
+            } else if isBuilding {
                 Text("·")
                 ProgressView().controlSize(.mini)
                 Text("Updating")
@@ -223,6 +227,12 @@ private struct ProfileActions: View {
                     model.setColor(name, for: profile.slug)
                 }
             }
+        }
+        Menu("Backups") {
+            Button("Back Up Now") { model.backUp(profile.slug) }
+            Button("Restore from Backup…") { model.restore(profile.slug) }
+            Divider()
+            Button("Show Backups in Finder") { model.revealBackups() }
         }
         Button("Show in Finder") { model.reveal(profile.slug) }
         Divider()

@@ -10,8 +10,9 @@ enum Shell {
     }
 
     @discardableResult
-    static func run(_ tool: String, _ arguments: [String]) -> Result {
+    static func run(_ tool: String, _ arguments: [String], in directory: URL? = nil) -> Result {
         let process = Process()
+        process.currentDirectoryURL = directory
         let output = Pipe()
         let error = Pipe()
         process.executableURL = URL(fileURLWithPath: tool)

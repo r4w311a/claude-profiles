@@ -38,11 +38,17 @@ enum Installer {
         Shell.run("/usr/bin/open", [Paths.menuBarApp.path])
     }
 
-    static func uninstall(removeData: Bool) throws {
+    static func uninstall(removeData: Bool, backUpFirst: Bool) throws {
         let profiles = Registry.load().profiles.filter { !$0.isDefault }
         let running = profiles.filter { $0.running != nil }
         guard running.isEmpty else {
             throw ProfileError("Quit \(running.map(\.appName).joined(separator: ", ")) first.")
+        }
+        if removeData, backUpFirst {
+            for profile in profiles where FileManager.default.fileExists(atPath: profile.resolvedDataDir) {
+                print("Backing up \(profile.name)…")
+                print("Saved \(try Backups.create(for: profile).path)")
+            }
         }
         uninstallLoginItem()
         NSRunningApplication.runningApplications(withBundleIdentifier: menuBarBundleID).forEach { $0.terminate() }

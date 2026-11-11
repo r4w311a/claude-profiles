@@ -59,6 +59,33 @@ brew upgrade claude-profiles
 claude-profiles install
 ```
 
+## Your data and backups
+
+Each profile keeps its data on your Mac, in `~/Library/Application Support/Claude-Profiles`. That includes things that exist only on this Mac:
+
+- the list of your Claude Code sessions in the Code tab
+- Cowork tasks
+- MCP servers, extensions and settings
+- the saved login
+
+Your chats and Projects are stored in your Claude account, so they come back whenever you sign in. Claude Code transcripts are kept in `~/.claude/projects`, which all profiles share.
+
+Back up a profile any time from its **⋯** menu (**Backups**, then **Back Up Now**), or:
+
+```sh
+claude-profiles backup Work
+```
+
+Backups are zip files in `~/Library/Application Support/Claude-Profiles Backups`. Nothing in Claude Profiles ever deletes that folder. To bring a profile back, choose **Restore from Backup…** in the same menu, or:
+
+```sh
+claude-profiles restore Work
+```
+
+`restore` uses the newest backup unless you pass a file, and moves the profile's current data to the Trash first. Run `claude-profiles backups` to see them all.
+
+Deleting a profile's data always asks you to confirm, and backs it up first unless you choose not to.
+
 ## Good to know
 
 - Your first account stays in the regular Claude app. The others are copies of it that live in `~/Applications/Claude Profiles` and take almost no disk space.
@@ -80,7 +107,10 @@ claude-profiles adopt-default <name>          name the account in the regular Cl
 claude-profiles open <name>                   open or switch to a profile
 claude-profiles quit <name>                   quit one profile
 claude-profiles update [--restart]            update profiles for the installed Claude
-claude-profiles remove <name> [--trash-data]  remove a profile
+claude-profiles remove <name> [--trash-data]  remove a profile, and optionally its data
+claude-profiles backup <name>                 save a backup of a profile's data
+claude-profiles restore <name> [<file.zip>]   bring a profile's data back from a backup
+claude-profiles backups [<name>]              list backups
 ```
 
 ## Uninstall
@@ -96,7 +126,7 @@ This removes the profile apps, the menu bar app and the login item. Your profile
 
 ### Remove everything
 
-To also remove every profile's logins, chats and settings:
+To also remove every profile's data. Each profile is backed up first, and you'll be asked to type `DELETE` to confirm:
 
 ```sh
 claude-profiles uninstall --all
@@ -110,7 +140,7 @@ brew untap r4w311a/tap
 - `~/Library/Application Support/Claude-Profiles`, which holds each profile's data and the profile list
 - Preferences, caches and web storage of the profile apps in `~/Library` (names start with `local.claude-profiles`)
 
-It also removes the login item and any permissions you gave the profile apps, like screen recording. Your regular Claude app and its data are never touched.
+It also removes the login item and any permissions you gave the profile apps, like screen recording. Your regular Claude app and its data, and your backups, are never touched. To skip the backups, add `--no-backup`.
 
 One optional cleanup is left to you: macOS keeps a note that each profile app was allowed to use "Claude Safe Storage". To clear it, open **Keychain Access**, search for "Claude Safe Storage", open it, and under **Access Control** remove the entries named after your profiles. Don't delete the item itself, since the regular Claude app needs it.
 

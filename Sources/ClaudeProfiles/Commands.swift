@@ -50,9 +50,23 @@ enum Commands {
 
     static func remove(_ args: inout Arguments) throws {
         let trashData = args.flag("--trash-data")
+        let skipConfirm = args.flag("--yes")
+        let skipBackup = args.flag("--no-backup")
         let profile = try args.requireProfile()
         if !profile.isDefault, profile.runningApp != nil {
             throw ProfileError("Quit \(profile.appName) first.")
+        }
+
+        if trashData, profile.dataDir != nil {
+            print(Backups.lossSummary)
+            if !skipConfirm, !Backups.confirm("Type \(profile.name) to confirm:", expecting: profile.name) {
+                print("Cancelled. Nothing was removed.")
+                return
+            }
+            if !skipBackup {
+                print("Backing up \(profile.name) first…")
+                print("Saved \(try Backups.create(for: profile).path)")
+            }
         }
 
         try ProfileApps.remove(profile)
@@ -68,6 +82,65 @@ enum Commands {
             }
         }
         print("Removed \(profile.name).")
+    }
+
+    static func backup(_ args: inout Arguments) throws {
+        let force = args.flag("--force")
+        let profile = try args.requireProfile()
+        if profile.running != nil, !force {
+            throw ProfileError("Quit \(profile.appName) first so the backup is complete, or add --force.")
+        }
+        print("Backing up \(profile.name)…")
+        print("Saved \(try Backups.create(for: profile).path)")
+    }
+
+    static func restore(_ args: inout Arguments) throws {
+        let skipConfirm = args.flag("--yes")
+        let profile = try args.requireProfile()
+        let archive: URL
+        if args.values.count > 1 {
+            archive = URL(fileURLWithPath: (args.values[1] as NSString).expandingTildeInPath)
+        } else if let latest = Backups.list(named: profile.name).first {
+            archive = latest
+        } else {
+            throw ProfileError("No backups found for \(profile.name) in \(Paths.backups.path).")
+        }
+        guard FileManager.default.fileExists(atPath: archive.path) else {
+            throw ProfileError("\(archive.path) does not exist.")
+        }
+
+        print("Restore \(profile.name) from \(archive.lastPathComponent)? Its current data moves to the Trash.")
+        if !skipConfirm, !Backups.confirm("Type \(profile.name) to confirm:", expecting: profile.name) {
+            print("Cancelled. Nothing was changed.")
+            return
+        }
+        try Backups.restore(profile, from: archive)
+        print("Restored \(profile.name). Open it with `claude-profiles open \(profile.name)`.")
+    }
+
+    static func listBackups(_ args: Arguments) throws {
+        let name = args.first.map { Registry.load().find($0)?.name ?? $0 }
+        let backups = Backups.list(named: name)
+        if backups.isEmpty { print("No backups yet in \(Paths.backups.path).") }
+        for backup in backups {
+            let size = (try? backup.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
+            print("\(backup.lastPathComponent)  \(ByteCountFormatter.string(fromByteCount: Int64(size), countStyle: .file))")
+        }
+    }
+
+    static func uninstall(_ args: inout Arguments) throws {
+        let removeData = args.flag("--all")
+        let skipConfirm = args.flag("--yes")
+        let skipBackup = args.flag("--no-backup")
+        if removeData {
+            print("This removes every profile app and all profile data. \(Backups.lossSummary)")
+            if !skipBackup { print("Each profile is backed up to \(Paths.backups.path) first.") }
+            if !skipConfirm, !Backups.confirm("Type DELETE to confirm:", expecting: "DELETE") {
+                print("Cancelled. Nothing was removed.")
+                return
+            }
+        }
+        try Installer.uninstall(removeData: removeData, backUpFirst: !skipBackup)
     }
 
     static func installLoginItem() throws {

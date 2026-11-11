@@ -5,6 +5,7 @@ enum Paths {
     static let appSupport = home.appendingPathComponent("Library/Application Support")
     static let root = appSupport.appendingPathComponent("Claude-Profiles")
     static let registry = root.appendingPathComponent("profiles.json")
+    static let backups = appSupport.appendingPathComponent("Claude-Profiles Backups")
     static let defaultData = appSupport.appendingPathComponent("Claude")
     static let profileApps = home.appendingPathComponent("Applications/Claude Profiles")
     static let menuBarApp = home.appendingPathComponent("Applications/Claude Profiles.app")

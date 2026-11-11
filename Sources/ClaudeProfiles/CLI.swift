@@ -11,9 +11,12 @@ enum CLI {
       claude-profiles open <name>
       claude-profiles quit <name>
       claude-profiles update [<name>] [--restart] [--force]
-      claude-profiles remove <name> [--trash-data]
+      claude-profiles remove <name> [--trash-data] [--no-backup] [--yes]
+      claude-profiles backup <name> [--force]
+      claude-profiles restore <name> [<backup.zip>] [--yes]
+      claude-profiles backups [<name>]
       claude-profiles install
-      claude-profiles uninstall [--all]
+      claude-profiles uninstall [--all] [--no-backup] [--yes]
       claude-profiles menubar
       claude-profiles install-agent
       claude-profiles uninstall-agent
@@ -52,7 +55,13 @@ enum CLI {
         case "install":
             try Installer.install()
         case "uninstall":
-            try Installer.uninstall(removeData: args.flag("--all"))
+            try Commands.uninstall(&args)
+        case "backup":
+            try Commands.backup(&args)
+        case "restore":
+            try Commands.restore(&args)
+        case "backups":
+            try Commands.listBackups(args)
         case "menubar":
             MenuBarApp.run(arguments: args.values)
         case "install-agent":

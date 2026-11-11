@@ -1,5 +1,6 @@
 import AppKit
 import Combine
+import UniformTypeIdentifiers
 
 final class AppModel: ObservableObject {
     @Published private(set) var profiles: [Profile] = []
@@ -7,6 +8,7 @@ final class AppModel: ObservableObject {
     @Published private(set) var pendingSlugs: Set<String> = []
     @Published private(set) var buildingSlugs: Set<String> = []
     @Published private(set) var failures: [String: String] = [:]
+    @Published private(set) var activities: [String: String] = [:]
     @Published private(set) var frontSlug: String?
     @Published private(set) var activeSlug: String?
     @Published private(set) var claudeVersion: String?
@@ -86,7 +88,7 @@ final class AppModel: ObservableObject {
     }
 
     func switchTo(_ slug: String) {
-        guard let profile = profile(slug), !buildingSlugs.contains(slug) else { return }
+        guard let profile = profile(slug), !buildingSlugs.contains(slug), activities[slug] == nil else { return }
         guard profile.runningApp == nil, ProfileApps.needsBuild(profile) else {
             Switcher.activate(profile) { [weak self] error in self?.report(error) }
             return
@@ -163,36 +165,123 @@ final class AppModel: ObservableObject {
     }
 
     func confirmRemove(_ slug: String) {
-        guard let profile = profile(slug) else { return }
+        guard let profile = profile(slug), activities[slug] == nil else { return }
+        if !profile.isDefault, profile.running != nil {
+            report(ProfileError("Quit \(profile.appName) before removing it."))
+            return
+        }
         let alert = NSAlert()
         alert.messageText = "Remove \(profile.name)?"
         alert.informativeText = profile.isDefault
             ? "The original Claude app and its data stay as they are. Only the profile entry is removed."
-            : "\(profile.appName) moves to the Trash. Its login and chats stay in its data folder unless you trash that too."
+            : "\(profile.appName) moves to the Trash. Its data is kept, so adding a profile with the same name brings it back."
         alert.addButton(withTitle: "Remove")
         alert.addButton(withTitle: "Cancel")
         if !profile.isDefault {
             alert.showsSuppressionButton = true
-            alert.suppressionButton?.title = "Also move its data folder to the Trash"
+            alert.suppressionButton?.title = "Also delete its data (sessions, settings and login)"
         }
         NSApp.activate(ignoringOtherApps: true)
         guard alert.runModal() == .alertFirstButtonReturn else { return }
 
-        do {
-            if !profile.isDefault, profile.running != nil {
-                ProfileApps.quit(profile)
-                throw ProfileError("\(profile.appName) was still open. It is quitting now, try removing it again in a moment.")
+        let deleteData = alert.suppressionButton?.state == .on && profile.dataDir != nil
+        var backUpFirst = false
+        if deleteData {
+            let warning = NSAlert()
+            warning.alertStyle = .critical
+            warning.messageText = "Delete \(profile.name)'s data?"
+            warning.informativeText = "\(Backups.lossSummary)\n\nA backup is saved first, so you can restore it later."
+            warning.addButton(withTitle: "Back Up and Delete")
+            warning.addButton(withTitle: "Cancel")
+            warning.addButton(withTitle: "Delete Without Backup")
+            let response = warning.runModal()
+            guard response != .alertSecondButtonReturn else { return }
+            backUpFirst = response == .alertFirstButtonReturn
+        }
+
+        activities[slug] = backUpFirst ? "Backing up" : "Removing"
+        buildQueue.async { [weak self] in
+            let result = Result {
+                if backUpFirst { _ = try Backups.create(for: profile) }
+                try ProfileApps.remove(profile)
+                var registry = Registry.load()
+                try registry.remove(profile)
+                if deleteData, let dataDir = profile.dataDir {
+                    try FileManager.default.trashItem(at: URL(fileURLWithPath: dataDir), resultingItemURL: nil)
+                }
             }
-            try ProfileApps.remove(profile)
-            var registry = Registry.load()
-            try registry.remove(profile)
-            if alert.suppressionButton?.state == .on, let dataDir = profile.dataDir {
-                try FileManager.default.trashItem(at: URL(fileURLWithPath: dataDir), resultingItemURL: nil)
+            DispatchQueue.main.async {
+                guard let self else { return }
+                self.activities.removeValue(forKey: slug)
+                self.icons.removeValue(forKey: slug)
+                self.reloadProfiles()
+                if case .failure(let error) = result { self.report(error) }
             }
-            icons.removeValue(forKey: slug)
-            reloadProfiles()
-        } catch {
-            report(error)
+        }
+    }
+
+    func backUp(_ slug: String) {
+        guard let profile = profile(slug), activities[slug] == nil else { return }
+        let wasRunning = profile.running != nil
+        if wasRunning {
+            let alert = NSAlert()
+            alert.messageText = "Quit \(profile.appName) to back it up?"
+            alert.informativeText = "A complete backup needs the profile closed. It opens again when the backup is done."
+            alert.addButton(withTitle: "Quit and Back Up")
+            alert.addButton(withTitle: "Cancel")
+            NSApp.activate(ignoringOtherApps: true)
+            guard alert.runModal() == .alertFirstButtonReturn else { return }
+        }
+        runActivity("Backing up", for: profile, reopen: wasRunning) {
+            let archive = try Backups.create(for: profile)
+            DispatchQueue.main.async { NSWorkspace.shared.activateFileViewerSelecting([archive]) }
+        }
+    }
+
+    func restore(_ slug: String) {
+        guard let profile = profile(slug), activities[slug] == nil else { return }
+        try? FileManager.default.createDirectory(at: Paths.backups, withIntermediateDirectories: true)
+        let panel = NSOpenPanel()
+        panel.message = "Choose a backup of \(profile.name)"
+        panel.allowedContentTypes = [.zip]
+        panel.directoryURL = Paths.backups
+        NSApp.activate(ignoringOtherApps: true)
+        guard panel.runModal() == .OK, let archive = panel.url else { return }
+
+        let wasRunning = profile.running != nil
+        let alert = NSAlert()
+        alert.messageText = "Restore \(profile.name) from this backup?"
+        alert.informativeText = "\(archive.lastPathComponent)\n\nIts current data moves to the Trash."
+            + (wasRunning ? " \(profile.appName) quits and opens again." : "")
+        alert.addButton(withTitle: "Restore")
+        alert.addButton(withTitle: "Cancel")
+        guard alert.runModal() == .alertFirstButtonReturn else { return }
+        runActivity("Restoring", for: profile, reopen: wasRunning) {
+            try Backups.restore(profile, from: archive)
+        }
+    }
+
+    func revealBackups() {
+        try? FileManager.default.createDirectory(at: Paths.backups, withIntermediateDirectories: true)
+        NSWorkspace.shared.open(Paths.backups)
+    }
+
+    private func runActivity(_ title: String, for profile: Profile, reopen: Bool, work: @escaping () throws -> Void) {
+        activities[profile.slug] = title
+        buildQueue.async { [weak self] in
+            let result = Result {
+                if profile.running != nil, !ProfileApps.quitAndWait(profile) {
+                    throw ProfileError("\(profile.appName) did not quit.")
+                }
+                try work()
+            }
+            if reopen { try? Updater.openAndWait(profile) }
+            DispatchQueue.main.async {
+                guard let self else { return }
+                self.activities.removeValue(forKey: profile.slug)
+                self.refreshRunning()
+                if case .failure(let error) = result { self.report(error) }
+            }
         }
     }
 
