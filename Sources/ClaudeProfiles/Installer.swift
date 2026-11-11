@@ -16,9 +16,11 @@ enum Installer {
         let menuBarApps = NSRunningApplication.runningApplications(withBundleIdentifier: menuBarBundleID)
         menuBarApps.forEach { $0.terminate() }
 
-        try copyExecutable(Paths.currentExecutable, to: Paths.installedBinary)
+        if Paths.isSourceBuild {
+            try copyExecutable(Paths.currentExecutable, to: Paths.installedBinary)
+            print("Installed \(Paths.installedBinary.path)")
+        }
         try copyExecutable(launcher, to: Paths.installedLauncher)
-        print("Installed \(Paths.installedBinary.path)")
 
         try writeMenuBarApp(launcher: launcher)
         print("Menu bar app: \(Paths.menuBarApp.path)")
@@ -84,8 +86,8 @@ enum Installer {
             "CFBundleDisplayName": "Claude Profiles",
             "CFBundleIconFile": "AppIcon",
             "CFBundlePackageType": "APPL",
-            "CFBundleShortVersionString": "3.0",
-            "CFBundleVersion": "3",
+            "CFBundleShortVersionString": Version.current,
+            "CFBundleVersion": Version.current,
             "LSMinimumSystemVersion": "13.0",
             "LSUIElement": true,
             menuBarKey: true,

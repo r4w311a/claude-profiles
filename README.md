@@ -19,9 +19,19 @@ Your current Claude stays exactly as it is and keeps updating itself. Every othe
 
 - macOS 13 or later
 - Claude Desktop in `/Applications`
-- Swift, which comes with Xcode or `xcode-select --install`
 
 ## Install
+
+With [Homebrew](https://brew.sh):
+
+```sh
+brew install r4w311a/tap/claude-profiles
+claude-profiles install
+```
+
+Run `claude-profiles install` again after `brew upgrade` to refresh the menu bar app.
+
+From source, with Swift from Xcode or `xcode-select --install`:
 
 ```sh
 git clone https://github.com/r4w311a/claude-profiles.git
@@ -29,7 +39,7 @@ cd claude-profiles
 ./install.sh
 ```
 
-Add `--login` to start the menu bar app when you log in. The command is installed to `~/.local/bin`, so make sure that is on your `PATH`.
+The source install puts the command in `~/.local/bin`, so make sure that is on your `PATH`. Add `--login` to start the menu bar app when you log in.
 
 ## Set up
 

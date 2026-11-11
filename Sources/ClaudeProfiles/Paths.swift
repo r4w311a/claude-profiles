@@ -20,8 +20,17 @@ enum Paths {
         (Bundle.main.executableURL ?? URL(fileURLWithPath: CommandLine.arguments[0])).resolvingSymlinksInPath()
     }
 
+    static var isSourceBuild: Bool {
+        currentExecutable.path.contains("/.build/")
+    }
+
     static var launcher: URL? {
-        let sibling = currentExecutable.deletingLastPathComponent().appendingPathComponent("claude-profile-launcher")
-        return [sibling, installedLauncher].first { FileManager.default.isExecutableFile(atPath: $0.path) }
+        let directory = currentExecutable.deletingLastPathComponent()
+        let candidates = [
+            directory.appendingPathComponent("claude-profile-launcher"),
+            directory.deletingLastPathComponent().appendingPathComponent("libexec/claude-profile-launcher"),
+            installedLauncher,
+        ]
+        return candidates.first { FileManager.default.isExecutableFile(atPath: $0.path) }
     }
 }

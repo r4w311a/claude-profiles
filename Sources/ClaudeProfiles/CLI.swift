@@ -16,6 +16,7 @@ enum CLI {
       claude-profiles menubar
       claude-profiles install-agent
       claude-profiles uninstall-agent
+      claude-profiles --version
 
     Colors: \(Palette.names.joined(separator: ", "))
     """
@@ -55,6 +56,8 @@ enum CLI {
             try Commands.installLoginItem()
         case "uninstall-agent":
             Commands.uninstallLoginItem()
+        case "version", "--version", "-v":
+            print(Version.current)
         case "help", "-h", "--help":
             print(usage)
         default:
