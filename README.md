@@ -19,7 +19,7 @@ I have a personal Claude subscription and a work Team plan on the same laptop, a
 
 ## Install
 
-You need macOS 13 or later, [Claude Desktop](https://claude.ai/download) in your Applications folder, and [Homebrew](https://brew.sh).
+You need macOS 13 or later, [Claude Desktop](https://claude.ai/download) in your Applications folder, and [Homebrew](https://brew.sh). Prefer to build it yourself? See [Build it yourself](#build-it-yourself).
 
 ```sh
 brew install r4w311a/tap/claude-profiles
@@ -85,22 +85,62 @@ claude-profiles remove <name> [--trash-data]  remove a profile
 
 ## Uninstall
 
+Quit your profile apps first, then:
+
 ```sh
 claude-profiles uninstall
 brew uninstall claude-profiles
 ```
 
-This removes the apps and the menu bar icon. Your profile logins and chats stay in `~/Library/Application Support/Claude-Profiles` until you delete that folder.
+This removes the profile apps, the menu bar app and the login item. Your profile logins and chats stay in `~/Library/Application Support/Claude-Profiles`, so if you install again later, your profiles come back as they were.
 
-## Build from source
+### Remove everything
 
-You need Swift, which comes with Xcode or `xcode-select --install`.
+To also remove every profile's logins, chats and settings:
 
 ```sh
-git clone https://github.com/r4w311a/claude-profiles.git
-cd claude-profiles
-./install.sh
+claude-profiles uninstall --all
+brew uninstall claude-profiles
+brew untap r4w311a/tap
 ```
+
+`--all` moves these to the Trash:
+
+- `~/Applications/Claude Profiles` and `~/Applications/Claude Profiles.app`
+- `~/Library/Application Support/Claude-Profiles`, which holds each profile's data and the profile list
+- Preferences, caches and web storage of the profile apps in `~/Library` (names start with `local.claude-profiles`)
+
+It also removes the login item and any permissions you gave the profile apps, like screen recording. Your regular Claude app and its data are never touched.
+
+One optional cleanup is left to you: macOS keeps a note that each profile app was allowed to use "Claude Safe Storage". To clear it, open **Keychain Access**, search for "Claude Safe Storage", open it, and under **Access Control** remove the entries named after your profiles. Don't delete the item itself, since the regular Claude app needs it.
+
+## Build it yourself
+
+If you'd rather not use Homebrew, you can build Claude Profiles from the source code. It takes about a minute.
+
+1. Install Apple's command line tools, if you don't have them yet:
+
+   ```sh
+   xcode-select --install
+   ```
+
+2. Download the code and run the installer:
+
+   ```sh
+   git clone https://github.com/r4w311a/claude-profiles.git
+   cd claude-profiles
+   ./install.sh
+   ```
+
+   This builds the app, puts the `claude-profiles` command in `~/.local/bin`, and opens the Claude Profiles window.
+
+3. If your terminal says `command not found`, add `~/.local/bin` to your PATH and open a new terminal window:
+
+   ```sh
+   echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.zshrc
+   ```
+
+To update later, run `git pull` and `./install.sh` again in the same folder. To uninstall, run `claude-profiles uninstall` (add `--all` to remove your profile data too), then delete the `claude-profiles` folder you cloned.
 
 ## License
 

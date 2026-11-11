@@ -38,8 +38,9 @@ enum Installer {
         Shell.run("/usr/bin/open", [Paths.menuBarApp.path])
     }
 
-    static func uninstall() throws {
-        let running = Registry.load().profiles.filter { !$0.isDefault && $0.running != nil }
+    static func uninstall(removeData: Bool) throws {
+        let profiles = Registry.load().profiles.filter { !$0.isDefault }
+        let running = profiles.filter { $0.running != nil }
         guard running.isEmpty else {
             throw ProfileError("Quit \(running.map(\.appName).joined(separator: ", ")) first.")
         }
@@ -51,8 +52,39 @@ enum Installer {
             print("Moved \(item.path) to the Trash.")
         }
         try? fileManager.removeItem(at: Paths.installedLauncher)
-        print("Your profile data is still in \(Paths.root.path).")
-        print("Run `brew uninstall claude-profiles` to remove the command.")
+
+        if removeData {
+            for profile in profiles { Shell.run("/usr/bin/tccutil", ["reset", "All", profile.bundleID]) }
+            removeUserData()
+        } else {
+            print("Your profile logins and chats are still in \(Paths.root.path).")
+            print("Run `claude-profiles uninstall --all` to remove them too.")
+        }
+
+        if Paths.currentExecutable.path.contains("/Cellar/") {
+            print("Run `brew uninstall claude-profiles` to remove the command.")
+        } else if fileManager.fileExists(atPath: Paths.installedBinary.path) {
+            try? fileManager.removeItem(at: Paths.installedBinary)
+            print("Removed \(Paths.installedBinary.path).")
+        }
+    }
+
+    private static func removeUserData() {
+        let fileManager = FileManager.default
+        let library = Paths.home.appendingPathComponent("Library")
+        var items = [Paths.root]
+        for folder in ["Preferences", "Caches", "HTTPStorages", "Saved Application State"] {
+            let directory = library.appendingPathComponent(folder)
+            let names = (try? fileManager.contentsOfDirectory(atPath: directory.path)) ?? []
+            items += names.filter { $0.hasPrefix(menuBarBundleID) }.map { directory.appendingPathComponent($0) }
+        }
+        for item in items where fileManager.fileExists(atPath: item.path) {
+            if item.pathExtension == "plist" {
+                Shell.run("/usr/bin/defaults", ["delete", item.deletingPathExtension().lastPathComponent])
+            }
+            guard (try? fileManager.trashItem(at: item, resultingItemURL: nil)) != nil else { continue }
+            print("Moved \(item.path) to the Trash.")
+        }
     }
 
     static func installLoginItem() throws {
