@@ -10,6 +10,22 @@ struct Profile: Codable, Equatable {
     var isDefault: Bool { dataDir == nil }
     var resolvedDataDir: String { dataDir ?? Paths.defaultData.path }
     var nsColor: NSColor { Palette.color(named: color) }
+    var initial: String { name.first.map { String($0).uppercased() } ?? "?" }
+
+    var appName: String { isDefault ? "Claude" : "Claude \(name)" }
+    var bundleID: String { isDefault ? Paths.claudeBundleID : "local.claude-profiles.\(slug)" }
+    var appURL: URL {
+        isDefault ? Paths.claudeApp : Paths.profileApps.appendingPathComponent("\(appName).app")
+    }
+
+    var runningApp: NSRunningApplication? {
+        NSRunningApplication.runningApplications(withBundleIdentifier: bundleID)
+            .first { !$0.isTerminated && $0.processIdentifier > 0 }
+    }
+
+    func badge(size: CGFloat = 16, alpha: CGFloat = 1) -> NSImage {
+        Palette.badge(initial, color: nsColor, size: size, alpha: alpha)
+    }
 }
 
 struct ProfileError: LocalizedError {
@@ -40,6 +56,11 @@ struct Registry {
         return profiles.first { $0.slug == slugify(query) || $0.name.lowercased() == lowered }
     }
 
+    func profile(forBundleID bundleID: String?) -> Profile? {
+        guard let bundleID else { return nil }
+        return profiles.first { $0.bundleID == bundleID }
+    }
+
     mutating func add(name: String, color: String?, adoptDefault: Bool = false) throws -> Profile {
         let slug = slugify(name)
         guard !slug.isEmpty else { throw ProfileError("Profile name needs at least one letter or digit.") }
@@ -63,6 +84,11 @@ struct Registry {
         profiles.append(profile)
         try save()
         return profile
+    }
+
+    mutating func remove(_ profile: Profile) throws {
+        profiles.removeAll { $0.slug == profile.slug }
+        try save()
     }
 }
 

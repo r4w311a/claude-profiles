@@ -1,0 +1,100 @@
+import AppKit
+import Foundation
+
+enum Installer {
+    static let menuBarKey = "ClaudeProfilesMenuBar"
+    static let menuBarBundleID = "local.claude-profiles"
+
+    static var isLoginItemInstalled: Bool {
+        FileManager.default.fileExists(atPath: Paths.launchAgent.path)
+    }
+
+    static func install() throws {
+        guard let launcher = Paths.launcher else {
+            throw ProfileError("claude-profile-launcher was not built. Run ./install.sh.")
+        }
+        let menuBarApps = NSRunningApplication.runningApplications(withBundleIdentifier: menuBarBundleID)
+        menuBarApps.forEach { $0.terminate() }
+
+        try copyExecutable(Paths.currentExecutable, to: Paths.installedBinary)
+        try copyExecutable(launcher, to: Paths.installedLauncher)
+        print("Installed \(Paths.installedBinary.path)")
+
+        try writeMenuBarApp(launcher: launcher)
+        print("Menu bar app: \(Paths.menuBarApp.path)")
+
+        let registry = Registry.load()
+        ProfileApps.removeLegacyLaunchers(keeping: registry)
+        let outcome = Updater.update(registry.profiles, restartRunning: false) { print("Building \($0.appName)…") }
+        Commands.report(outcome)
+
+        if NSRunningApplication.runningApplications(withBundleIdentifier: Paths.claudeBundleID).count > 1 {
+            print("A profile from the old setup is still running inside the original Claude app.")
+            print("Quit that window with Cmd+Q, then open the profile's own app, for example \"Claude Work\".")
+        }
+        Shell.run("/usr/bin/open", [Paths.menuBarApp.path])
+    }
+
+    static func installLoginItem() throws {
+        let plist: [String: Any] = [
+            "Label": Paths.agentLabel,
+            "ProgramArguments": ["/usr/bin/open", "-a", Paths.menuBarApp.path],
+            "RunAtLoad": true,
+        ]
+        try FileManager.default.createDirectory(at: Paths.launchAgent.deletingLastPathComponent(),
+                                                withIntermediateDirectories: true)
+        try PropertyListSerialization.data(fromPropertyList: plist, format: .xml, options: 0).write(to: Paths.launchAgent)
+        Shell.run("/bin/launchctl", ["bootout", "gui/\(getuid())/\(Paths.agentLabel)"])
+        let result = Shell.run("/bin/launchctl", ["bootstrap", "gui/\(getuid())", Paths.launchAgent.path])
+        guard result.succeeded else { throw ProfileError("launchctl could not load the login item: \(result.error)") }
+    }
+
+    static func uninstallLoginItem() {
+        Shell.run("/bin/launchctl", ["bootout", "gui/\(getuid())/\(Paths.agentLabel)"])
+        try? FileManager.default.removeItem(at: Paths.launchAgent)
+    }
+
+    private static func copyExecutable(_ source: URL, to destination: URL) throws {
+        guard source.standardizedFileURL != destination.resolvingSymlinksInPath().standardizedFileURL else { return }
+        let fileManager = FileManager.default
+        try fileManager.createDirectory(at: destination.deletingLastPathComponent(), withIntermediateDirectories: true)
+        if fileManager.fileExists(atPath: destination.path) { try fileManager.removeItem(at: destination) }
+        try fileManager.copyItem(at: source, to: destination)
+    }
+
+    private static func writeMenuBarApp(launcher: URL) throws {
+        let fileManager = FileManager.default
+        let bundle = Paths.menuBarApp
+        let contents = bundle.appendingPathComponent("Contents")
+        let macOS = contents.appendingPathComponent("MacOS")
+        let resources = contents.appendingPathComponent("Resources")
+        if fileManager.fileExists(atPath: bundle.path) { try fileManager.removeItem(at: bundle) }
+        try fileManager.createDirectory(at: macOS, withIntermediateDirectories: true)
+        try fileManager.createDirectory(at: resources, withIntermediateDirectories: true)
+
+        try fileManager.copyItem(at: Paths.currentExecutable, to: macOS.appendingPathComponent("claude-profiles"))
+        try fileManager.copyItem(at: launcher, to: macOS.appendingPathComponent("claude-profile-launcher"))
+        let icon = Paths.claudeApp.appendingPathComponent("Contents/Resources/electron.icns")
+        if fileManager.fileExists(atPath: icon.path) {
+            try fileManager.copyItem(at: icon, to: resources.appendingPathComponent("AppIcon.icns"))
+        }
+
+        let info: [String: Any] = [
+            "CFBundleExecutable": "claude-profiles",
+            "CFBundleIdentifier": menuBarBundleID,
+            "CFBundleName": "Claude Profiles",
+            "CFBundleDisplayName": "Claude Profiles",
+            "CFBundleIconFile": "AppIcon",
+            "CFBundlePackageType": "APPL",
+            "CFBundleShortVersionString": "2.0",
+            "CFBundleVersion": "2",
+            "LSMinimumSystemVersion": "13.0",
+            "LSUIElement": true,
+            menuBarKey: true,
+        ]
+        try PropertyListSerialization.data(fromPropertyList: info, format: .xml, options: 0)
+            .write(to: contents.appendingPathComponent("Info.plist"))
+        Shell.run(Signing.codesign, ["--force", "--sign", "-", bundle.path])
+        Shell.run(Paths.lsregister, ["-f", bundle.path])
+    }
+}

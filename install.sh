@@ -13,4 +13,4 @@ case ":$PATH:" in
   *":$HOME/.local/bin:"*) ;;
   *) echo "Note: add ~/.local/bin to your PATH to use \`claude-profiles\` directly." ;;
 esac
-echo "Done. Open ~/Applications/Claude Profiles.app to start the menu bar switcher."
+echo "Done. The menu bar app is running."

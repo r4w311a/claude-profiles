@@ -10,7 +10,7 @@ enum CLI {
       claude-profiles adopt-default <name> [--color <color>]
       claude-profiles open <name>
       claude-profiles quit <name>
-      claude-profiles signin <name> [--yes]
+      claude-profiles update [<name>] [--restart] [--force]
       claude-profiles remove <name> [--trash-data]
       claude-profiles install
       claude-profiles menubar
@@ -43,18 +43,18 @@ enum CLI {
             try Commands.open(args)
         case "quit":
             try Commands.quit(args)
-        case "signin":
-            try Commands.signIn(&args)
+        case "update", "sync":
+            try Commands.update(&args)
         case "remove", "rm":
             try Commands.remove(&args)
         case "install":
-            try Commands.install()
+            try Installer.install()
         case "menubar":
             MenuBarController.run()
         case "install-agent":
-            try Commands.installAgent()
+            try Commands.installLoginItem()
         case "uninstall-agent":
-            Commands.uninstallAgent()
+            Commands.uninstallLoginItem()
         case "help", "-h", "--help":
             print(usage)
         default:

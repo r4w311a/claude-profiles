@@ -6,13 +6,13 @@ I have a personal Claude subscription and a work Team plan on the same laptop, a
 
 ## What it does
 
-- Runs any number of Claude Desktop accounts side by side, each with its own login and chats
-- Creates a launcher app per profile, so you can open them from Spotlight or the Dock
-- Shows a colored dot in the menu bar for the profile you're in
-- Handles sign-in, so Google login lands in the right window
-- Leaves the official Claude app untouched, so updates keep working
+- Turns each extra account into its own Mac app, like "Claude Work", with its own login, chats and settings
+- Gives every profile app a colored badge, so the Dock and Cmd-Tab show which is which
+- Shows a colored letter in the menu bar for the profile you're in
+- Switches profiles with ⌃⌥1, ⌃⌥2 and so on
+- Rebuilds the profile apps when Claude updates, with one click for the ones that are open
 
-Each profile is a separate Claude Desktop process started with its own data folder.
+Your current Claude stays exactly as it is and keeps updating itself. Every other profile is a local copy of it with its own name, icon and data folder. The copies take almost no disk space.
 
 ## Requirements
 
@@ -35,32 +35,40 @@ Add `--login` to start the menu bar app when you log in. The command is installe
 ```sh
 claude-profiles adopt-default Personal
 claude-profiles add Work
-claude-profiles signin Work
 ```
 
-`adopt-default` keeps the account you're already signed in to. `signin` closes your other Claude windows while you log in to the new one, then reopens them. You only need it once per profile.
+`adopt-default` names the account you're already signed in to. `add` creates the app **Claude Work** in `~/Applications/Claude Profiles`. Open it from Spotlight, the Dock or the menu bar and sign in.
 
-After that, open **Claude Work** or **Claude Personal** from Spotlight, or pick a profile from the menu bar.
+The first time a profile app opens, macOS asks whether it may use "Claude Safe Storage". Choose **Always Allow**. That key protects the profile's login on disk.
+
+## Updates
+
+Claude updates itself as usual. When it does, the menu bar app rebuilds every profile app that isn't open. For the ones that are open, choose **Update All Profiles** in the menu, or run:
+
+```sh
+claude-profiles update --restart
+```
 
 ## Commands
 
 ```
-list                          show profiles and what's running
-add <name> [--color c]        create a profile
-adopt-default <name>          use the existing Claude data as a profile
-open <name>                   open or focus a profile
+list                          show profiles, what's running, and update state
+add <name> [--color c]        create a profile app
+adopt-default <name>          name the account in the original Claude app
+open <name>                   open or switch to a profile
 quit <name>                   quit one profile
-signin <name>                 sign in to a profile safely
+update [<name>] [--restart]   rebuild profile apps for the installed Claude
 remove <name> [--trash-data]  remove a profile
 install-agent                 start the menu bar app at login
 ```
 
 ## Good to know
 
-- Every window shows the same Claude icon in the Dock and Cmd-Tab. The menu bar dot tells you which account is in front.
-- Open profiles from their launchers. The regular Claude icon focuses whichever window macOS picks.
+- Profile apps are signed on your Mac instead of by Anthropic. After each Claude update, macOS asks once more for the keychain, and for permissions like screen recording if a profile uses them.
+- To skip those repeat prompts, create a code signing certificate named "Claude Profiles" in Keychain Access (Certificate Assistant, Create a Certificate, type Code Signing). The tool uses it automatically.
+- Links like `claude://` and files you open with Claude go to the original app.
+- Passkey and Microsoft sign-in rely on keychain sharing that only Anthropic's signature allows, so they may not work in profile apps.
 - Claude Code settings in `~/.claude` are shared between profiles.
-- This depends on a Chromium option that Claude doesn't document. A future update could stop it from working.
 - If one account is from your employer, check that your company is fine with it.
 - This is an unofficial tool and isn't affiliated with Anthropic.
 

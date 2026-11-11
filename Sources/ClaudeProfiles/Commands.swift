@@ -3,19 +3,15 @@ import Foundation
 enum Commands {
     static func list() {
         let registry = Registry.load()
-        let instances = Instances.running()
         if registry.profiles.isEmpty {
             print("No profiles yet. Try `claude-profiles adopt-default Personal`.")
         }
         for profile in registry.profiles {
-            let status = Instances.instance(for: profile, in: instances)
-                .map { "running (pid \($0.pid))" } ?? "stopped"
-            let location = profile.isDefault ? "(default folder)" : profile.resolvedDataDir
-            print("\(pad(profile.name, 14)) \(pad(profile.color, 8)) \(pad(status, 22)) \(location)")
+            let running = profile.runningApp.map { "running (pid \($0.processIdentifier))" } ?? "stopped"
+            let state = profile.isDefault ? "original app" : ProfileApps.state(of: profile).rawValue
+            print("\(pad(profile.name, 14)) \(pad(profile.color, 8)) \(pad(running, 22)) \(pad(state, 13)) \(profile.appURL.path)")
         }
-        for instance in instances where Instances.profile(for: instance, in: registry) == nil {
-            print("Unregistered Claude instance, pid \(instance.pid): \(instance.dataDir ?? "default folder")")
-        }
+        if let version = ProfileApps.claudeVersion { print("Claude \(version)") }
     }
 
     static func add(_ args: inout Arguments, adoptDefault: Bool) throws {
@@ -23,58 +19,45 @@ enum Commands {
         guard let name = args.first else { throw ProfileError("Missing profile name.") }
         var registry = Registry.load()
         let profile = try registry.add(name: name, color: color, adoptDefault: adoptDefault)
-        let launcher = try Bundles.writeLauncher(for: profile)
-        print("Added \(profile.name) (\(profile.color)) at \(profile.resolvedDataDir)")
-        print("Launcher: \(launcher.path)")
+        if !profile.isDefault {
+            print("Building \(profile.appName)…")
+            try ProfileApps.build(profile)
+        }
+        print("Added \(profile.name) (\(profile.color)). Open it from Spotlight as \"\(profile.appName)\".")
     }
 
     static func open(_ args: Arguments) throws {
-        try Instances.open(args.requireProfile())
+        try Updater.openAndWait(args.requireProfile())
     }
 
     static func quit(_ args: Arguments) throws {
         let profile = try args.requireProfile()
-        print(Instances.quit(profile) ? "Asked \(profile.name) to quit." : "\(profile.name) is not running.")
+        print(ProfileApps.quit(profile) ? "Asked \(profile.appName) to quit." : "\(profile.appName) is not running.")
     }
 
-    static func signIn(_ args: inout Arguments) throws {
-        let skipPrompt = args.flag("--yes")
-        let profile = try args.requireProfile()
+    static func update(_ args: inout Arguments) throws {
+        let restart = args.flag("--restart")
+        let force = args.flag("--force")
         let registry = Registry.load()
-        let others = Instances.others(than: profile)
-
-        if !others.isEmpty {
-            let names = others.map { Instances.displayName($0, in: registry) }.joined(separator: ", ")
-            print("Google sign-in returns through a claude:// link, which macOS may hand to the wrong Claude window.")
-            print("To sign in to \(profile.name), these will quit and reopen afterwards: \(names)")
-            if !skipPrompt {
-                print("Continue? [y/N] ", terminator: "")
-                guard readLine()?.lowercased().hasPrefix("y") == true else {
-                    print("Cancelled.")
-                    return
-                }
-            }
-            try Instances.quitForSignIn(others, registry: registry)
+        let profiles = args.first == nil ? registry.profiles : [try args.requireProfile()]
+        let outcome = Updater.update(profiles, restartRunning: restart, force: force) { print("Building \($0.appName)…") }
+        report(outcome)
+        if outcome.updated.isEmpty, outcome.waiting.isEmpty, outcome.failed.isEmpty {
+            print("All profile apps match Claude \(ProfileApps.claudeVersion ?? "").")
         }
-
-        try Instances.open(profile)
-        print("Sign in inside the Claude \(profile.name) window, then press Return here… ", terminator: "")
-        _ = readLine()
-        Instances.relaunch(others)
-        if !others.isEmpty { print("Reopened \(others.count) other instance(s).") }
+        if !outcome.failed.isEmpty { throw ProfileError("Some profiles could not be updated.") }
     }
 
     static func remove(_ args: inout Arguments) throws {
         let trashData = args.flag("--trash-data")
         let profile = try args.requireProfile()
-        if trashData, Instances.instance(for: profile) != nil {
-            throw ProfileError("Quit \(profile.name) before trashing its data.")
+        if !profile.isDefault, profile.runningApp != nil {
+            throw ProfileError("Quit \(profile.appName) first.")
         }
 
+        try ProfileApps.remove(profile)
         var registry = Registry.load()
-        registry.profiles.removeAll { $0.slug == profile.slug }
-        try registry.save()
-        Bundles.removeLauncher(for: profile)
+        try registry.remove(profile)
 
         if trashData {
             if let dataDir = profile.dataDir {
@@ -87,31 +70,22 @@ enum Commands {
         print("Removed \(profile.name).")
     }
 
-    static func install() throws {
-        let fileManager = FileManager.default
-        let source = Bundles.currentExecutable
-        let target = Paths.installedBinary
-        if source.path != target.resolvingSymlinksInPath().path {
-            try fileManager.createDirectory(at: target.deletingLastPathComponent(), withIntermediateDirectories: true)
-            if fileManager.fileExists(atPath: target.path) { try fileManager.removeItem(at: target) }
-            try fileManager.copyItem(at: source, to: target)
-            print("Installed \(target.path)")
-        }
-        try Bundles.writeMenuBarApp()
-        print("Menu bar app: \(Paths.menuBarApp.path)")
-        for profile in Registry.load().profiles {
-            print("Launcher: \(try Bundles.writeLauncher(for: profile).path)")
-        }
+    static func installLoginItem() throws {
+        try Installer.installLoginItem()
+        print("The menu bar app will start at login.")
     }
 
-    static func installAgent() throws {
-        try Bundles.installAgent()
-        print("The menu bar app will start at login (\(Paths.launchAgent.path)).")
+    static func uninstallLoginItem() {
+        Installer.uninstallLoginItem()
+        print("Removed the login item.")
     }
 
-    static func uninstallAgent() {
-        Bundles.uninstallAgent()
-        print("Removed the login agent.")
+    static func report(_ outcome: Updater.Outcome) {
+        for profile in outcome.updated { print("Updated \(profile.appName).") }
+        for profile in outcome.waiting {
+            print("\(profile.appName) is running. Run `claude-profiles update --restart` to update it now.")
+        }
+        for (profile, error) in outcome.failed { print("Could not update \(profile.appName): \(error.localizedDescription)") }
     }
 
     private static func pad(_ text: String, _ width: Int) -> String {
