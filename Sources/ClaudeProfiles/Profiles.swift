@@ -23,11 +23,15 @@ struct Profile: Codable, Equatable {
     }
 
     var running: (app: NSRunningApplication, pid: pid_t)? {
-        guard let app = NSRunningApplication.runningApplications(withBundleIdentifier: bundleID)
-            .first(where: { !$0.isTerminated })
+        if isDefault {
+            let app = NSRunningApplication.runningApplications(withBundleIdentifier: bundleID).first {
+                !$0.isTerminated && $0.processIdentifier > 0 && ProcessLookup.isAlive($0.processIdentifier)
+            }
+            return app.map { ($0, $0.processIdentifier) }
+        }
+        guard let pid = ProcessLookup.pid(executable: executablePath),
+              let app = NSRunningApplication(processIdentifier: pid)
         else { return nil }
-        if app.processIdentifier > 0 { return (app, app.processIdentifier) }
-        guard let pid = ProcessLookup.pid(executable: executablePath) else { return nil }
         return (app, pid)
     }
 

@@ -20,6 +20,7 @@ final class AppModel: ObservableObject {
     private var previousSlug: String?
     private var icons: [String: NSImage] = [:]
     private var watchers: [DispatchSourceFileSystemObject] = []
+    private var exitWatchers: [pid_t: DispatchSourceProcess] = [:]
     private var updateTimer: Timer?
     private let hotKeys = HotKeys()
     private let buildQueue = DispatchQueue(label: "local.claude-profiles.build", qos: .userInitiated)
@@ -220,8 +221,34 @@ final class AppModel: ObservableObject {
     }
 
     private func refreshRunning() {
-        let running = Set(profiles.filter { $0.runningApp != nil }.map(\.slug))
+        var running: Set<String> = []
+        var pids: Set<pid_t> = []
+        for profile in profiles {
+            guard let pid = profile.running?.pid else { continue }
+            running.insert(profile.slug)
+            pids.insert(pid)
+        }
         if running != runningSlugs { runningSlugs = running }
+        watchExits(of: pids)
+    }
+
+    private func watchExits(of pids: Set<pid_t>) {
+        for pid in Set(exitWatchers.keys).subtracting(pids) {
+            exitWatchers.removeValue(forKey: pid)?.cancel()
+        }
+        for pid in pids where exitWatchers[pid] == nil {
+            let source = DispatchSource.makeProcessSource(identifier: pid, eventMask: .exit, queue: .main)
+            source.setEventHandler { [weak self] in self?.profileExited(pid) }
+            source.resume()
+            exitWatchers[pid] = source
+        }
+    }
+
+    private func profileExited(_ pid: pid_t) {
+        exitWatchers.removeValue(forKey: pid)?.cancel()
+        refreshRunning()
+        updateIdleProfiles()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 15) { [weak self] in self?.updateIdleProfiles() }
     }
 
     private func refreshPending() {
