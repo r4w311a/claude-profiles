@@ -50,7 +50,7 @@ enum CLI {
         case "install":
             try Installer.install()
         case "menubar":
-            MenuBarController.run()
+            MenuBarApp.run(arguments: args.values)
         case "install-agent":
             try Commands.installLoginItem()
         case "uninstall-agent":

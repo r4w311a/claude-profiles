@@ -10,6 +10,8 @@ enum ProfileApps {
     static let slugKey = "ClaudeProfileSlug"
     static let dataDirKey = "ClaudeProfileDataDir"
     static let colorKey = "ClaudeProfileColor"
+    static let formatKey = "ClaudeProfileFormat"
+    static let formatVersion = 2
     static let launcherName = "Claude Profile"
     static let iconName = "ProfileIcon"
     static let removedInfoKeys = [
@@ -31,6 +33,7 @@ enum ProfileApps {
         let matches = info[slugKey] as? String == profile.slug
             && info[dataDirKey] as? String == profile.dataDir
             && info[colorKey] as? String == profile.color
+            && info[formatKey] as? Int == formatVersion
             && info["CFBundleDisplayName"] as? String == profile.appName
             && info["CFBundleVersion"] as? String == claudeVersion
         return matches ? .current : .outdated
@@ -101,17 +104,18 @@ enum ProfileApps {
         }
     }
 
-    static func quit(_ profile: Profile) -> Bool {
-        profile.runningApp?.terminate() ?? false
+    @discardableResult
+    static func quit(_ profile: Profile) -> pid_t? {
+        guard let (app, pid) = profile.running else { return nil }
+        if !app.terminate() { kill(pid, SIGTERM) }
+        return pid
     }
 
     static func quitAndWait(_ profile: Profile, timeout: TimeInterval = 20) -> Bool {
-        guard let app = profile.runningApp else { return true }
-        let pid = app.processIdentifier
-        app.terminate()
+        guard let pid = quit(profile) else { return true }
         let deadline = Date().addingTimeInterval(timeout)
-        while kill(pid, 0) == 0, Date() < deadline { Thread.sleep(forTimeInterval: 0.2) }
-        return kill(pid, 0) != 0
+        while ProcessLookup.isAlive(pid), Date() < deadline { Thread.sleep(forTimeInterval: 0.2) }
+        return !ProcessLookup.isAlive(pid)
     }
 
     private static func clone(_ source: URL, to destination: URL) throws {
@@ -132,6 +136,7 @@ enum ProfileApps {
         info[slugKey] = profile.slug
         info[dataDirKey] = dataDir
         info[colorKey] = profile.color
+        info[formatKey] = formatVersion
         try PropertyListSerialization.data(fromPropertyList: info, format: .xml, options: 0).write(to: url)
     }
 

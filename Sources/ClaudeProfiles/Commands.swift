@@ -7,7 +7,7 @@ enum Commands {
             print("No profiles yet. Try `claude-profiles adopt-default Personal`.")
         }
         for profile in registry.profiles {
-            let running = profile.runningApp.map { "running (pid \($0.processIdentifier))" } ?? "stopped"
+            let running = profile.running.map { "running (pid \($0.pid))" } ?? "stopped"
             let state = profile.isDefault ? "original app" : ProfileApps.state(of: profile).rawValue
             print("\(pad(profile.name, 14)) \(pad(profile.color, 8)) \(pad(running, 22)) \(pad(state, 13)) \(profile.appURL.path)")
         }
@@ -32,7 +32,7 @@ enum Commands {
 
     static func quit(_ args: Arguments) throws {
         let profile = try args.requireProfile()
-        print(ProfileApps.quit(profile) ? "Asked \(profile.appName) to quit." : "\(profile.appName) is not running.")
+        print(ProfileApps.quit(profile) != nil ? "Asked \(profile.appName) to quit." : "\(profile.appName) is not running.")
     }
 
     static func update(_ args: inout Arguments) throws {

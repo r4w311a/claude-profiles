@@ -18,10 +18,20 @@ struct Profile: Codable, Equatable {
         isDefault ? Paths.claudeApp : Paths.profileApps.appendingPathComponent("\(appName).app")
     }
 
-    var runningApp: NSRunningApplication? {
-        NSRunningApplication.runningApplications(withBundleIdentifier: bundleID)
-            .first { !$0.isTerminated && $0.processIdentifier > 0 }
+    var executablePath: String {
+        appURL.appendingPathComponent("Contents/MacOS/Claude").resolvingSymlinksInPath().path
     }
+
+    var running: (app: NSRunningApplication, pid: pid_t)? {
+        guard let app = NSRunningApplication.runningApplications(withBundleIdentifier: bundleID)
+            .first(where: { !$0.isTerminated })
+        else { return nil }
+        if app.processIdentifier > 0 { return (app, app.processIdentifier) }
+        guard let pid = ProcessLookup.pid(executable: executablePath) else { return nil }
+        return (app, pid)
+    }
+
+    var runningApp: NSRunningApplication? { running?.app }
 
     func badge(size: CGFloat = 16, alpha: CGFloat = 1) -> NSImage {
         Palette.badge(initial, color: nsColor, size: size, alpha: alpha)

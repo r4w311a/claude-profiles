@@ -22,6 +22,7 @@ enum Installer {
 
         try writeMenuBarApp(launcher: launcher)
         print("Menu bar app: \(Paths.menuBarApp.path)")
+        if isLoginItemInstalled { try installLoginItem() }
 
         let registry = Registry.load()
         ProfileApps.removeLegacyLaunchers(keeping: registry)
@@ -38,7 +39,7 @@ enum Installer {
     static func installLoginItem() throws {
         let plist: [String: Any] = [
             "Label": Paths.agentLabel,
-            "ProgramArguments": ["/usr/bin/open", "-a", Paths.menuBarApp.path],
+            "ProgramArguments": ["/usr/bin/open", "-a", Paths.menuBarApp.path, "--args", MenuBarApp.backgroundFlag],
             "RunAtLoad": true,
         ]
         try FileManager.default.createDirectory(at: Paths.launchAgent.deletingLastPathComponent(),
@@ -74,10 +75,7 @@ enum Installer {
 
         try fileManager.copyItem(at: Paths.currentExecutable, to: macOS.appendingPathComponent("claude-profiles"))
         try fileManager.copyItem(at: launcher, to: macOS.appendingPathComponent("claude-profile-launcher"))
-        let icon = Paths.claudeApp.appendingPathComponent("Contents/Resources/electron.icns")
-        if fileManager.fileExists(atPath: icon.path) {
-            try fileManager.copyItem(at: icon, to: resources.appendingPathComponent("AppIcon.icns"))
-        }
+        try ProfileIcon.writeManagerIcon(to: resources.appendingPathComponent("AppIcon.icns"))
 
         let info: [String: Any] = [
             "CFBundleExecutable": "claude-profiles",
@@ -86,8 +84,8 @@ enum Installer {
             "CFBundleDisplayName": "Claude Profiles",
             "CFBundleIconFile": "AppIcon",
             "CFBundlePackageType": "APPL",
-            "CFBundleShortVersionString": "2.0",
-            "CFBundleVersion": "2",
+            "CFBundleShortVersionString": "3.0",
+            "CFBundleVersion": "3",
             "LSMinimumSystemVersion": "13.0",
             "LSUIElement": true,
             menuBarKey: true,

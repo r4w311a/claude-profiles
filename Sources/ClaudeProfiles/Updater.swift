@@ -39,9 +39,10 @@ enum Updater {
     }
 
     static func openAndWait(_ profile: Profile) throws {
+        if profile.runningApp == nil, ProfileApps.needsBuild(profile) { try ProfileApps.build(profile) }
         let done = DispatchSemaphore(value: 0)
         var failure: Error?
-        ProfileApps.open(profile) { error in
+        Switcher.activate(profile) { error in
             failure = error
             done.signal()
         }

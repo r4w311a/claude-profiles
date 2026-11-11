@@ -7,10 +7,11 @@ I have a personal Claude subscription and a work Team plan on the same laptop, a
 ## What it does
 
 - Turns each extra account into its own Mac app, like "Claude Work", with its own login, chats and settings
-- Gives every profile app a colored badge, so the Dock and Cmd-Tab show which is which
+- Colors each profile app and adds its letter, so the Dock and Cmd-Tab show which is which
 - Shows a colored letter in the menu bar for the profile you're in
-- Switches profiles with ⌃⌥1, ⌃⌥2 and so on
-- Rebuilds the profile apps when Claude updates, with one click for the ones that are open
+- Switches profiles instantly with ⌃⌥1, ⌃⌥2 and so on, and ⌃⌥` takes you back to the previous one
+- Comes with a small window to add, open, recolor and remove profiles
+- Rebuilds the profile apps when Claude updates, with an **Update All** button for the ones that are open
 
 Your current Claude stays exactly as it is and keeps updating itself. Every other profile is a local copy of it with its own name, icon and data folder. The copies take almost no disk space.
 
@@ -39,11 +40,13 @@ claude-profiles add Work
 
 `adopt-default` names the account you're already signed in to. `add` creates the app **Claude Work** in `~/Applications/Claude Profiles`. Open it from Spotlight, the Dock or the menu bar and sign in.
 
+You can do the same from the **Claude Profiles** window. It opens after install, and again whenever you open Claude Profiles from Spotlight or choose **Manage Profiles** in the menu bar.
+
 The first time a profile app opens, macOS asks whether it may use "Claude Safe Storage". Choose **Always Allow**. That key protects the profile's login on disk.
 
 ## Updates
 
-Claude updates itself as usual. When it does, the menu bar app rebuilds every profile app that isn't open. For the ones that are open, choose **Update All Profiles** in the menu, or run:
+Claude updates itself as usual. When it does, Claude Profiles rebuilds every profile app that isn't open. For the ones that are open, click **Update All** in the window or the menu bar, or run:
 
 ```sh
 claude-profiles update --restart
@@ -61,6 +64,11 @@ update [<name>] [--restart]   rebuild profile apps for the installed Claude
 remove <name> [--trash-data]  remove a profile
 install-agent                 start the menu bar app at login
 ```
+
+## Faster switching
+
+- Turn on **Start at login** and **Open profiles at login** to keep every profile running in the background, so even the first switch is instant.
+- Cmd-` cycles the windows of the profile you're in, and Cmd-Tab moves between profiles like any other app.
 
 ## Good to know
 
